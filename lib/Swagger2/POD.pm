@@ -25,6 +25,34 @@ use constant NO_DESCRIPTION => 'No description.';
 
 my $MOJO_MESSAGE_RESPONSE = Mojo::Message::Response->new;
 
+=head2 ATTRIBUTES
+
+=head2 render_x
+
+  $self = $self->render_x({ ... };
+  $hash_ref = $self->render_x;
+
+This module will also include custom "x-" attributes from the Swagger spec,
+in addition to the standard set of information. This attribute defines
+the attributes to include in the output format. The default holds these
+keys:
+
+=over 4
+
+=item * disclaimer
+
+This will extract C</info/x-disclaimer> from the spec and add it to the
+output document, right after the "DESCRIPTION". The attribute should
+hold a plain text string.
+
+=back
+
+Note: The default value will probably change in the future.
+
+=cut
+
+has render_x => sub { +{disclaimer => 1}; };
+
 =head1 METHODS
 
 =head2 to_string
@@ -91,8 +119,9 @@ sub _header_to_string {
   $info->{version}     ||= '0.01';
 
   $str .= sprintf "=head1 NAME\n\n%s\n\n",             $info->{title};
-  $str .= sprintf "=head1 DESCRIPTION\n\n%s\n\n",      $info->{description};
   $str .= sprintf "=head1 VERSION\n\n%s\n\n",          $info->{version};
+  $str .= sprintf "=head1 DESCRIPTION\n\n%s\n\n",      $info->{description};
+  $str .= sprintf "=head1 DISCLAIMER\n\n%s\n\n",       $info->{'x-disclaimer'} if $info->{'x-disclaimer'};
   $str .= sprintf "=head1 TERMS OF SERVICE\n\n%s\n\n", $info->{termsOfService} if $info->{termsOfService};
   $str;
 }
