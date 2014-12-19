@@ -139,14 +139,12 @@ if ($ENV{MOJO_APP_LOADER}) {
   require File::Basename;
   require Mojolicious;
 
-  my $swagger  = Swagger2->new;
-  my $filename = '';
+  my $swagger = Swagger2->new;
   $app = Mojolicious->new;
 
   if ($ENV{SWAGGER_API_FILE}) {
     $app->defaults(raw => Mojo::Util::slurp($ENV{SWAGGER_API_FILE}));
     $swagger->load($ENV{SWAGGER_API_FILE});
-    $filename = File::Basename::basename($ENV{SWAGGER_API_FILE});
   }
 
   $app->routes->get(
@@ -157,7 +155,7 @@ if ($ENV{MOJO_APP_LOADER}) {
         any => sub {
           my $c = shift;
           $c->stash(layout => undef) if $c->req->is_xhr;
-          $c->render(template => 'editor', filename => $filename, swagger => $swagger);
+          $c->render(template => 'editor', swagger => $swagger);
         }
       );
     }
@@ -206,7 +204,6 @@ __DATA__
   var draggable = document.getElementById("resizer");
   var editor = document.getElementById("editor");
   var preview = document.getElementById("preview");
-  var filename = "<%= $filename %>";
   var tid, xhr, i;
 
   var loaded = function() {
@@ -244,12 +241,6 @@ __DATA__
     name: "save",
     bindKey: {win: "Ctrl-S",  mac: "Command-S"},
     exec: function(ace) {
-      var a = document.createElement("a");
-      a.href = "data:application/json;charset-utf-8," + ace.getValue();
-      filename = prompt("Save as...", filename);
-      if (!filename) return filename = "";
-      a.download = filename;
-      a.click();
     }
   });
 
