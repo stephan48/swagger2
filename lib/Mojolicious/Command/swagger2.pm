@@ -138,14 +138,15 @@ Jan Henning Thorsen - C<jhthorsen@cpan.org>
 if ($ENV{MOJO_APP_LOADER}) {
   require File::Basename;
   require Mojolicious;
-  require Mojolicious::Plugin::PODRenderer;
 
-  my $swagger = Swagger2->new;
+  my $swagger  = Swagger2->new;
+  my $filename = '';
   $app = Mojolicious->new;
 
   if ($ENV{SWAGGER_API_FILE}) {
     $app->defaults(raw => Mojo::Util::slurp($ENV{SWAGGER_API_FILE}));
     $swagger->load($ENV{SWAGGER_API_FILE});
+    $filename = File::Basename::basename($ENV{SWAGGER_API_FILE});
   }
 
   $app->routes->get(
@@ -156,11 +157,12 @@ if ($ENV{MOJO_APP_LOADER}) {
         any => sub {
           my $c = shift;
           $c->stash(layout => undef) if $c->req->is_xhr;
-          $c->render(template => 'editor');
+          $c->render(template => 'editor', filename => $filename, swagger => $swagger);
         }
       );
     }
   );
+
   $app->routes->post(
     '/' => sub {
       my $c = shift;
@@ -178,7 +180,7 @@ if ($ENV{MOJO_APP_LOADER}) {
     }
   );
 
-  $app->defaults(swagger => $swagger, layout => 'default');
+  $app->defaults(layout => 'default');
   $app->plugin('PODRenderer');
   unshift @{$app->renderer->classes}, __PACKAGE__;
   unshift @{$app->static->paths}, File::Spec->catdir(File::Basename::dirname(__FILE__), 'swagger2-public');
@@ -204,6 +206,7 @@ __DATA__
   var draggable = document.getElementById("resizer");
   var editor = document.getElementById("editor");
   var preview = document.getElementById("preview");
+  var filename = "<%= $filename %>";
   var tid, xhr, i;
 
   var loaded = function() {
@@ -235,6 +238,19 @@ __DATA__
   ace.getSession().on("change", function(e) {
     if (tid) clearTimeout(tid);
     tid = setTimeout(render, 400);
+  });
+
+  ace.commands.addCommand({
+    name: "save",
+    bindKey: {win: "Ctrl-S",  mac: "Command-S"},
+    exec: function(ace) {
+      var a = document.createElement("a");
+      a.href = "data:application/json;charset-utf-8," + ace.getValue();
+      filename = prompt("Save as...", filename);
+      if (!filename) return filename = "";
+      a.download = filename;
+      a.click();
+    }
   });
 
   if (localStorage["swagger-spec"]) {
