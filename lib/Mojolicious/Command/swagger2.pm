@@ -140,24 +140,38 @@ if ($ENV{MOJO_APP_LOADER}) {
   require Mojolicious;
   require Mojolicious::Plugin::PODRenderer;
 
-  my $swagger = Swagger2->new;
+  my $SWAGGER = Swagger2->new;
   $app = Mojolicious->new;
 
   if ($ENV{SWAGGER_API_FILE}) {
     $app->defaults(raw => Mojo::Util::slurp($ENV{SWAGGER_API_FILE}));
-    $swagger->load($ENV{SWAGGER_API_FILE});
+    $SWAGGER->load($ENV{SWAGGER_API_FILE});
   }
 
   $app->routes->get(
     '/' => sub {
-      my $c = shift;
-      $c->respond_to(
-        txt => {data => $swagger->pod->to_string},
-        any => sub {
-          my $c = shift;
-          $c->stash(layout => undef) if $c->req->is_xhr;
-          $c->render(template => 'editor');
-        }
+      my $c   = shift;
+      my $url = $c->param('url');
+
+      $c->delay(
+        sub {
+          my ($delay) = @_;
+          return $self->ua->get($url, $delay->begin) if $url =~ /^https?:/;
+          return $delay->pass;
+        },
+        sub {
+          my ($delay, $tx) = @_;
+          my $swagger = $tx ? Swagger2->new->parse($tx->res->body) : $SWAGGER;
+
+          $c->respond_to(
+            txt => {data => $swagger->pod->to_string},
+            any => sub {
+              my $c = shift;
+              $c->stash(layout => undef) if $c->req->is_xhr;
+              $c->render(template => 'editor', swagger => $swagger);
+            }
+          );
+        },
       );
     }
   );
@@ -178,7 +192,7 @@ if ($ENV{MOJO_APP_LOADER}) {
     }
   );
 
-  $app->defaults(swagger => $swagger, layout => 'default');
+  $app->defaults(layout => 'default');
   $app->plugin('PODRenderer');
   unshift @{$app->renderer->classes}, __PACKAGE__;
   unshift @{$app->static->paths}, File::Spec->catdir(File::Basename::dirname(__FILE__), 'swagger2-public');
