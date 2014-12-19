@@ -197,6 +197,7 @@ __DATA__
 <div id="editor"><%= stash('raw') || '---' %></div>
 <div id="resizer">&nbsp;</div>
 <div id="preview"><div class="pod-container"><%= pod_to_html $swagger->pod->to_string %></div></div>
+<iframe id="downloader"></iframe>
 %= javascript "ace.js"
 %= javascript begin
 (function(ace) {
