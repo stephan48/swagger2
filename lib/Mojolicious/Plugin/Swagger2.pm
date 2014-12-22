@@ -180,6 +180,7 @@ application.
 sub register {
   my ($self, $app, $config) = @_;
   my $r = $config->{route} || $app->routes->any('/');
+  my $ws_operations = {};
   my ($base_path, $paths, $swagger);
 
   for my $k (qw( controller url )) {
@@ -206,13 +207,21 @@ sub register {
       my $name = decamelize(ucfirst sprintf '%s_%s', $info->{operationId} || $route_path, $m);
       die "$name is not an unique route! ($method $path)" if $app->routes->lookup($name);
       warn "[Swagger2] Add route $method $route_path\n"   if DEBUG;
-      $r->$m($route_path => $self->_generate_request_handler($name, $info))->name($name);
+      $ws_operations->{$info->{operationId}} = $info;
+      $info->{'x-mojo-method'} ||= $name;
+      $r->$m($route_path => $self->_generate_request_handler($info))->name($name);
     }
+  }
+
+  if (my $route_path = $config->{websocket}) {
+    $route_path = '/' . join '/', grep {$_} @$base_path, split '/', $route_path;
+    $r->websocket($route_path => $self->_websocket($ws_operations));
   }
 }
 
 sub _generate_request_handler {
-  my ($self, $method, $config) = @_;
+  my ($self, $config) = @_;
+  my $method     = $config->{'x-mojo-method'};
   my $controller = $self->controller;
 
   unless ($controller->can($method)) {
@@ -262,7 +271,7 @@ sub _validate_input {
     my $name = $p->{name};
     my $value
       = $in eq 'query'  ? $query->param($name)
-      : $in eq 'path'   ? $c->stash($name)
+      : $in eq 'path'   ? $c->param($name)
       : $in eq 'header' ? $headers->header($name)
       :                   $body->{$name};
 
@@ -279,6 +288,63 @@ sub _validate_input {
 
   $v{valid} = @{$v{errors}} ? Mojo::JSON->false : Mojo::JSON->true;
   return \%v, \%input;
+}
+
+sub _websocket {
+  my ($self, $operations) = @_;
+  my $controller = $self->controller;
+  my $finish     = $controller->can('websocket_finish');
+
+  return sub {
+    my $c = shift;
+
+    if ($finish) {
+      $c->on(finish => sub { +(bless $_[0], $controller)->$finish; });
+    }
+
+    $c->on(
+      json => sub {
+        my ($c, $input) = @_;
+        my $id = $input->{id} or die "Missing 'id' in input";
+        my $config = $operations->{$input->{op} || ''} || {};
+        my $method = $config->{'x-mojo-method'}        || 'no_such_method';
+        my $shadow = $controller->new;
+        my $req    = $shadow->tx->req;
+
+        unless ($shadow->can($method)) {
+          return $c->send({json => {status => 400, id => $id, body => $self->_not_implemented}});
+        }
+
+        if (my $query = $input->{query}) {
+          $req->url->query(%$query);
+        }
+        if (my $path = $input->{path}) {
+          $shadow->param($_ => $path->{$_}) for keys %$path;    # TODO: This is probably a security issue
+        }
+
+        $c->delay(
+          sub {
+            my ($delay) = @_;
+            my ($v, $input) = $self->_validate_input($shadow, $config);
+
+            return $c->send({json => {status => 400, id => $id, body => $v}}) unless $v->{valid};
+            return $shadow->$method($input, $delay->begin);
+          },
+          sub {
+            my $delay  = shift;
+            my $data   = shift;
+            my $status = shift || 200;
+            my $format = $config->{responses}{$status} || $config->{responses}{default};
+            my @err    = $self->_validator->validate($data, $format->{schema});
+
+            return $c->send({json => {status => 500, id => $id, body => {errors => \@err, valid => Mojo::JSON->false}}})
+              if @err;
+            return $c->send({json => {status => 200, id => $id, body => $data}});
+          },
+        );
+      }
+    );
+  };
 }
 
 =head1 COPYRIGHT AND LICENSE
