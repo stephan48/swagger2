@@ -4,6 +4,11 @@ use Mojo::Base 'Mojolicious::Controller';
 our $RES  = {};
 our $CODE = 200;
 
+sub file {
+  my ($c, $args, $cb) = @_;
+  $c->$cb("data");
+}
+
 sub boolean_in_url {
   my ($c, $args, $cb) = @_;
   $c->$cb({p1 => $args->{p1}, q1 => $args->{q1}});
