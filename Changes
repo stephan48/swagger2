@@ -1,5 +1,8 @@
 Revision history for perl distribution Swagger2
 
+0.32 Not Released
+ - Add EXPERIMENTAL Swagger2::DSL
+
 0.42 2015-07-11T22:02:27+0200
  - Fix parsing formData
  - Add support for no content in response
